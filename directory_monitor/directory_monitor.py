@@ -34,11 +34,12 @@ configuration_template = '''
 
 
 class MainApp(tkinter.Tk):
-    def __init__(self, title: str, log_queue: Queue, config: ConfigurationValues, *args, **kwargs) -> None:
+    def __init__(self, title: str, log_queue: Queue, main_thread : Thread, config: ConfigurationValues, *args, **kwargs) -> None:
         tkinter.Tk.__init__(self, *args, **kwargs)
         self.title(title)
         self.config_values = config
         self.log_queue = log_queue
+        self.main_thread = main_thread
 
         # If config has window size and position, set it in app
         if config.width and config.height:
@@ -152,6 +153,30 @@ class MainApp(tkinter.Tk):
                 values = self.path_tree_view.item(child)['values']
                 if str(values[0]) == str(path_dict['path_name']):
                     self.path_tree_view.item(child, values=(path_dict['path_name'], path_dict['quantity']))
+        if '<UPDATE>' in message:
+            event.set()
+            self.main_thread.join()
+            logger.debug('Thread finalized')
+            try:
+                config_values = json_config.load_json_config('directory_monitor_config.json', configuration_template)
+                config = ConfigurationValues.check_type_insertion(config_values)
+                self.config_values = config
+                self.__update_gui()
+            except Exception as error:
+                logger.critical(f'Configuration error {error}')
+                exit()
+            event.clear()
+            self.main_thread = Thread(target=main, args=(event, self.config_values, ), daemon=True, name='Directory Monitor')
+            self.main_thread.start()
+
+
+    def __update_gui(self):
+        for child in self.path_tree_view.get_children():
+            self.path_tree_view.delete(child)
+        for i in range(len(self.config_values.path_list)):
+            path_values = self.config_values.path_list[i]
+            self.path_tree_view.insert('', tkinter.END, values=(path_values.name, path_values.path))
+        self.__update()          
 
 
     def __always_on_top(self):
@@ -162,6 +187,7 @@ class MainApp(tkinter.Tk):
         self.attributes('-topmost', self.entry.get())
         self.config_values.always_on_top = self.entry.get()
         self.__save_config_on_change()
+
 
     def __update(self):
         r'''
@@ -174,8 +200,6 @@ class MainApp(tkinter.Tk):
     def __configuration(self):
         logger.debug('Config button clicked')
         self.config_window = Config_Window(self.config_values, (400, 300), 'directory_monitor_config.json', self.icon_path)
-        logger.debug(f'Config {self.grab_status}')
-        logger.debug(self.winfo_children)
 
 
     def __on_window_close(self):
@@ -239,7 +263,7 @@ class MainApp(tkinter.Tk):
 
 
     @staticmethod
-    def update_count(config: ConfigurationValues) -> None:
+    def update_count(config : ConfigurationValues) -> None:
         for path_value in config.path_list:
             try:
                 file_list = file_handler.file_list(path_value.path, path_value.extension)
@@ -256,7 +280,7 @@ class MainApp(tkinter.Tk):
 def main(event: Event, config: ConfigurationValues):
     while True:
         MainApp.update_count(config)
-        if event.set():
+        if event.is_set():
             return
         sleep(config.update_time)
 
@@ -307,6 +331,6 @@ if __name__ == '__main__':
     main_thread = Thread(target=main, args=(event, config, ), daemon=True, name='Directory Monitor')
     main_thread.start()
 
-    main_app = MainApp('Directoru Monitor', log_queue, config)
+    main_app = MainApp('Directoru Monitor', log_queue, main_thread, config)
     main_app.mainloop()
 
