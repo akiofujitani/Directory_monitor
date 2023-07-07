@@ -1,0 +1,16 @@
+{
+    "update_time": 10,
+    "width": "326",
+    "height": "389",
+    "x": "1291",
+    "y": "342",
+    "always_on_top": "0",
+    "path_list": [
+        {
+            "name": "Template",
+            "path": ".",
+            "extension": "",
+            "ignore": ""
+        }
+    ]
+}
