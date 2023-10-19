@@ -1,342 +1,153 @@
-import tkinter, logging, json_config, file_handler
-from tkinter import Misc, messagebox
+import tkinter, logging, json_config, file_handler, support_funcions
+from tkinter import messagebox
 from tkinter import ttk
 from tkinter import filedialog
 from copy import deepcopy
 from classes import ConfigurationValues, PathDetails
-from dataclasses import dataclass
 from PIL import Image, ImageTk
-from os.path import normpath, exists
+from os.path import normpath, exists, getmtime, join
+from os import startfile
+from datetime import datetime
 logger = logging.getLogger('gui_classes')
 
 
-# @dataclass
-# class Configuration_Frame:
+'''
+=============================================================================================================================
 
+        List View Window        List View Window        List View Window        List View Window        List View Window                        
 
-#     def __init__(self) -> None:
-#         pass
+=============================================================================================================================
+'''
 
+class ListView(tkinter.Toplevel):
+    r'''
+    List View Window
+    ----------------
 
-#     def __eq__(self, other) -> bool:
-#         if not isinstance(other, self.__class__):
-#             return NotImplemented
-#         else:
-#             self_values = self.__dict__
-#             for key in self_values.keys():
-#                 if not getattr(self, key) == getattr(other, key):
-#                     return False
-#             return True
+    PathDetail
+    name : str
+    path: str
+    extension: str
+    ignore: str    
+    '''
+    def __init__(self, master_win: tkinter.Tk, path_detail: PathDetails, config: ConfigurationValues, min_size: tuple, *args, **kwargs):
+        tkinter.Toplevel.__init__(self, *args, **kwargs)
+        self.config_values = config
+        self.last_grab = self.grab_current()
+        self.grab_set()
+        self.path_detail = path_detail
+        self.title(f'List View for {self.path_detail.name}')
+        self.minsize(width=min_size[0], height=min_size[1])
+        self.master_win = master_win
+        if self.config_values.always_on_top == True:
+            self.master_win.attributes('-topmost', False)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        win_pos = support_funcions.check_win_pos(self.config_values, 'list_view')
+        if win_pos:
+            self.geometry(win_pos)
+
+        # Treeview Frame
+        frame_treeview = tkinter.Frame(self)
+        frame_treeview.grid(column=0, row=0, columnspan=5, sticky='nesw', padx=(5), pady=(5))
+        frame_treeview.columnconfigure(0, weight=1)
+        frame_treeview.rowconfigure(0, minsize=35)
+        frame_treeview.rowconfigure(1, weight=1)
+
+        # Filter
+        tkinter.Label(frame_treeview, text='Filter ').grid(column=2, row=0, sticky='nesw', padx=(5), pady=(5))
+        call_back_reg = (frame_treeview.register(self.__validate_text),'%P')        # register a callback function in Frame
+        self.filter_entry = tkinter.Entry(frame_treeview, width=40, justify=tkinter.CENTER, validate='key', validatecommand=call_back_reg) # Entry with verification
+        self.filter_entry.grid(column=3, row=0, columnspan=2, sticky='nesw', padx=(5), pady=(5))
+
+        # Treeview
+        heading_dict = {'file_name' : 'File Name', 'modified_date' :'Modified Date'}
+        column_size = (250, 250)
+        anchor = (tkinter.W, tkinter.CENTER)
+        self.treeview_list = ttk.Treeview(frame_treeview, columns=('file_name', 'modified_date'), show='headings')
+        for i, (key, value) in enumerate(heading_dict.items()):
+            self.treeview_list.heading(key, text=value)
+            self.treeview_list.column(i, anchor=anchor[i], minwidth=30, width=column_size[i])
+        self.treeview_list.grid(column=0, row=1, columnspan=4, sticky='nesw')
+        self.treeview_list.columnconfigure(0, weight=1)
+        self.treeview_list.rowconfigure(0, weight=1)
+        scroll_bar = ttk.Scrollbar(frame_treeview, orient=tkinter.VERTICAL, command=self.treeview_list.yview)
+        scroll_bar.grid(column=4, row=1, sticky='ns', padx=(0, 5))
+        self.treeview_list.configure(yscrollcommand=scroll_bar.set)
+        self.file_list = self.create_treeview_list()
+        self.tree_view_insert(self.file_list)
+        self.treeview_list.bind('<Double-1>', self.__tree_item_view)
+        self.treeview_list.bind('<Return>', self.__tree_item_view)
+
+        # Button Frame
+        frame_button = tkinter.Frame(self)
+        frame_button.grid(column=0, row=1, columnspan=5, sticky='nesw', padx=(5), pady=(5))
+
+        # Button
+        self.button_close = tkinter.Button(frame_button, text='Close', command=self.__on_window_close, width=15)
     
 
-#     def check_create_insertion(cls, dict_values=dict):
-#         '''
-#         Receive values and transforms it in class
-#         '''
-#         pass
+    def __tree_item_view(self, event=None):
+        try:
+            item_id = self.treeview_list.selection()[0]
+            selected_item = self.treeview_list.item(item_id)['values']
+            startfile(join(self.path_detail.path, selected_item[0]))
+        except:
+            messagebox.showerror('Selection error', 'No row is selected')
+        logger.debug('Treeview double click, return')
 
-
-#     def __dict__(self) -> dict:
-#         '''
-#         Custom dict converter
-#         '''
-#         pass
-
-# @dataclass
-# class Tree_Settings:
-#     '''
-#     Tree settings dataclass, customize it for your needings
-#     '''
-#     pass
-
-
-#     def __eq__(self, other) -> bool:
-#         if not isinstance(other, self.__class__):
-#             return NotImplemented
-#         else:
-#             self_values = self.__dict__
-#             for key in self_values.keys():
-#                 if not getattr(self, key) == getattr(other, key):
-#                     return False
-#             return True
-
-
-# @dataclass
-# class Config_Frame_Values:
-#     '''
-#     - labels_entry_type must use the Keys as Labels to be inserted in Config_Frame GUI and the values must be the type of the entry (str, int, boolean, treeview, path)
-#     - treeview_columns must be present only in case of treeview entry type, use the referent label name as key to be used to create the treeview columns.
-#     '''
-#     labels_entry_type : dict
-#     treeview_columns : None | dict
-
-
-#     def add_label(self, key=str, value=any):
-#         if key in self.labels_entry_type.keys():
-#             raise Exception('Key already exists error')
-#         self.labels_entry_type[key] = value
-    
-
-#     def add_treview_columns(self, key, value_list=tuple):
-#         if key not in self.labels_entry_type.keys():
-#             raise Exception('Key dont exist in labels')
-#         self.treeview_columns[key] = value_list
-
-
-
-
-# class Config_Frame(tkinter.Frame):
-#     def __init__(self, config=ConfigurationValues, config_frame_value=Config_Frame_Values, *args, **kwargs) -> None:
-#         tkinter.Frame.__init__(self, *args, **kwargs)
-#         self.config = config
-#         self.labels = config_frame_value.labels_entry_type.keys()
-#         self.entry_type = config_frame_value.labels_entry_type.values()
-#         self.treeview_columns = config_frame_value.treeview_columns
-#         self.entry_list = {}
-#         button_dict = {}
-#         config_values = list(self.config.__dict__.values())
-
-#         row_value = 0
-#         for i in range(len(self.labels)):
-#             ttk.Label(self, text=self.labels[i], justify='left').grid(column=0, row=i, padx=(5), pady=(5, 0))
-#             match self.entry_type[i]:
-#                 case 'str':
-#                     entry = ttk.Entry(self, width=40, justify='center')                
-#                     entry.grid(column=1, row=row_value, columnspan=3, sticky='nesw', padx=(5), pady=(5, 0))
-#                     entry.insert(tkinter.END, str(config_values[i]))
-#                 case 'int':
-#                     valid_command = (self.register(self.__validade_values))
-#                     entry = ttk.Entry(self, width=40, justify='center', validate='key', validatecommand=(valid_command, '%P'))                
-#                     entry.grid(column=1, row=row_value, columnspan=3, sticky='nesw', padx=(5), pady=(5, 0))
-#                     entry.insert(tkinter.END, config_values[i])   
-#                     button_dict[self.labels[i]] = valid_command
-#                 case 'path':
-#                     entry = ttk.Entry(self, width=40, justify='center')                
-#                     entry.grid(column=1, row=row_value, columnspan=2, sticky='nesw', padx=(5), pady=(5, 0))
-#                     browse_button = tkinter.Button(self, text='...', width=3)
-#                     browse_button.grid(column=3, row=i, padx=(0, 5), pady=(5, 0))
-#                     button_dict[f'{self.labels[i]}'] = browse_button
-#                     button_dict[f'{self.labels[i]}'].configure(command=lambda info=self.labels[i]: self.__browse_files(info))
-#                     entry.insert(tkinter.END, str(config_values[i]))
-#                 case 'boolean':
-#                     entry = tkinter.BooleanVar()
-#                     entry.set(config_values[i] if not config_values[i] == '' else False)
-#                     boolean_name = ('True', 'False')
-#                     radio_bool_button = {}
-#                     for i in range(len(boolean_name)):
-#                         radio_bool_button[i] = tkinter.ttk.Radiobutton(self, text=boolean_name[i], value=eval(boolean_name[i]), variable=entry, command=lambda variable=entry: self.__click_radio_bool(variable))
-#                         radio_bool_button[i].grid(column=1 + i, row=row_value)
-#                 case 'treeview':
-#                     entry = ttk.Treeview(self, columns=tuple(self.treeview_columns.keys()), show='headings')
-#                     for key, value in self.treeview_columns.items():
-#                         entry.heading(key, text=value)
-#                         entry.column(key, minwidth=10, width=100)
-#                     for tree_settings in config_values[i]:
-#                         entry.insert('', tkinter.END, values=(tuple(tree_settings.__dict__.values())))
-#                     entry.grid(column=1, row=row_value, columnspan=3, sticky='nesw', padx=(5), pady=(5, 0))
-#                     entry.bind('<Double-1>', lambda info=self.labels[i]: self.__tree_item_edit(info))
-#                     entry.bind("<Return>", lambda info=self.labels[i]: self.__tree_item_edit(info))
-#                     row_value += 1
-
-#                     add_button = tkinter.Button(self, text='Add', command=lambda info=self.labels[i]: self.__click_button_add(info), width=15)
-#                     add_button.grid(column=2, row=row_value, padx=(5, 0), pady=(0,5))
-#                     button_dict[f'{self.labels[i]}_add']
-#                     edit_button = tkinter.Button(self, text='Edit', command=lambda info=self.labels[i]: self.__click_button_edit(info), width=15)
-#                     edit_button.grid(column=3, row=row_value, padx=(0), pady=(0, 5))
-#                     button_dict[f'{self.labels[i]}_edit']
-#                     delete_button = tkinter.Button(self, text='Delete', command=lambda info=self.labels[i]: self.__click_button_delete(info), width=15)
-#                     delete_button.grid(column=4, row=row_value, padx=(0), pady=(0, 5))
-#                     button_dict[f'{self.labels[i]}_delete']
-#                 case _:
-#                     entry = ttk.Entry(self, width=40, justify='center')                
-#                     entry.grid(column=1, row=row_value, columnspan=3, sticky='nesw', padx=(5), pady=(5, 0))
-#                     entry.insert(tkinter.END, str(config_values[i]))
-#             row_value += 1
-#             self.entry_list[self.labels[i]] = entry
-#         self.columnconfigure(1, weight=1)
-    
-
-#     def __tree_item_edit(self, entry_label=str, event=None):
-#         try:
-#             if self.row_config.state() == 'normal':
-#                 self.row_config.focus_force()
-#         except Exception as error:
-#             logger.debug(error)
-#             try:
-#                 self.entry_list[entry_label].selection()[0]
-#                 self.row_config = Edit_Values(self.entry_list[entry_label], 
-#                                 tuple(self.treeview_columns.keys()),
-#                                 tuple(self.treeview_columns.values()),
-#                                 'Edit settings')
-#             except:
-#                 messagebox.showerror('Edit error', 'No row is selected')
-#         logger.debug('Double click')
-
-
-#     def __click_button_add(self, entry_label=str):
-#         logger.debug('Click button add')
-#         empty_values = []
-#         for _ in range(len(self.entry_list[entry_label])):
-#             empty_values.append('')
-#         self.self.entry_list[entry_label].insert('', tkinter.END, values=(tuple(empty_values)))
-#         children_list = self.self.entry_list[entry_label].get_children()
-#         self.self.entry_list[entry_label].selection_set(children_list[-1])
-#         self.__tree_item_edit(None)
-
-
-#     def __click_button_edit(self):
-#         logger.debug('Click button edit')
-#         self.__tree_item_edit(self)
-
-
-#     def __click_button_delete(self, entry_label=str) -> bool:
-#         try:
-#             selected_item = self.entry_list[entry_label].selection()[0]
-#             logger.debug(selected_item)
-#             if messagebox.askquestion('Delete', f'Do you really want to delete the item {selected_item}'):
-#                 self.entry_list[entry_label].delete(selected_item)
-#                 return True
-#             return False
-#         except:
-#             messagebox.showerror('Edit error', 'No row is selected')
-
-
-#     def __click_radio_bool(self, variable):
-#         logger.debug(variable.get())
-
-
-#     # Return updated config values in dict form
-#     def return_config_updated(self) -> dict:
-#         new_config = {}
-#         for i in range(len(self.labels)):
-#             match self.entry_type[i]:
-#                 case 'str':
-#                     new_config[self.labels[i]] = str(self.entry_list[self.labels[i]].get())
-#                 case 'int':
-#                     new_config[self.labels[i]] = int(self.entry_list[self.labels[i]].get())
-#                 case 'path':
-#                     new_config[self.labels[i]] = normpath(self.entry_list[self.labels[i]].get())
-#                 case 'boolean':
-#                     new_config[self.labels[i]] = eval(str(self.entry_list[self.labels[i]].get()))
-#                 case 'treeview':
-#                     treeview_entry = self.entry_list[self.labels[i]]
-#                     new_config[self.labels[i]] = [treeview_entry.item(value)['values'] for value in treeview_entry.get_children()]
-#         return new_config
-
-
-#     def __browse_files(self, button_id=str):
-#         logger.debug('Browser files')
-#         logger.debug(button_id)
-#         file_path = filedialog.askdirectory(initialdir='/', title='Select the file path')
-#         if file_path:
-#             self.entry_list[button_id].delete(0, tkinter.END)
-#             self.entry_list[button_id].insert(tkinter.END, str(normpath(file_path)))
-#         self.focus_force()
-#         self.lift()
-#         logger.debug(f'File path {file_path}')
-
-
-#     def __validade_values(self, value=str):
-#         if value.isnumeric() or value == '':
-#             logger.debug(f'{value} is true')
-#             return True
-#         else:
-#             logger.debug(f'{value} is false')
-#             return False
-
-# class Tree_Config_Frame(tkinter.Frame):
-#     def __init__(self, 
-#                 config=ConfigurationValues, 
-#                 file_manag_values=dict, 
-#                 values_type=tuple, 
-#                 edit_win_title=str | None, 
-#                 drop_down_list=None | dict,
-#                 *args, **kwargs) -> None:
-#         tkinter.Frame.__init__(self, *args, **kwargs)
-#         self.config = config
-#         self.values_type = values_type
-#         self.edit_win_title = edit_win_title
-#         self.drop_down_list = drop_down_list
-#         file_manag_column = tuple(list(file_manag_values.keys()))
-#         self.file_manag_descri = tuple(list(file_manag_values.values()))
-#         self.file_manag_tree = ttk.Treeview(self, columns=file_manag_column, show='headings')
-#         for i in range(len(file_manag_column)):
-#             self.file_manag_tree.heading(file_manag_column[i], text=self.file_manag_descri[i])
-#             self.file_manag_tree.column(file_manag_column[i], minwidth=10, width=100)
-#         for directory_list in self.config.directory_list:
-#             self.file_manag_tree.insert('', tkinter.END, values=(tuple(directory_list.__dict__.values())))
-#         self.file_manag_tree.bind('<Double-1>', self.__tree_item_edit)
-#         self.file_manag_tree.bind("<Return>", self.__tree_item_edit)
-#         self.file_manag_tree.grid(column=1, 
-#                         row=0, 
-#                         columnspan=4,
-#                         sticky='nesw', 
-#                         padx=(5, 0), 
-#                         pady=(5, 0))
-#         y_scrollbar = ttk.Scrollbar(self, orient=tkinter.VERTICAL, command=self.file_manag_tree.yview)
-#         self.file_manag_tree.configure(yscroll=y_scrollbar.set)
-#         y_scrollbar.grid(row=0, 
-#                         column=5, 
-#                         sticky='ns',
-#                         padx=(0, 5),
-#                         pady=(5, 0))
-#         self.file_manag_tree.columnconfigure(0, weight=1)
-#         self.file_manag_tree.rowconfigure(0, weight=1)
-#         self.add_button = tkinter.Button(self, text='Add', command=self.__click_button_add, width=15)
-#         self.add_button.grid(column=2, row=1, padx=(5, 0), pady=(0,5))
-#         self.edit_button = tkinter.Button(self, text='Edit', command=self.__click_button_edit, width=15)
-#         self.edit_button.grid(column=3, row=1, padx=(0), pady=(0, 5))
-#         self.delete_button = tkinter.Button(self, text='Delete', command=self.__click_button_delete, width=15)
-#         self.delete_button.grid(column=4, row=1, padx=(0), pady=(0, 5))
 
     
-#     def __tree_item_edit(self, event):
-#         try:
-#             if self.file_config.state() == 'normal':
-#                 self.file_config.focus_force()
-#         except Exception as error:
-#             logger.debug(error)
-#             try:
-#                 self.file_manag_tree.selection()[0]
-#                 self.file_config = Edit_Values(self.file_manag_tree, 
-#                                 self.file_manag_descri,
-#                                 self.values_type,
-#                                 self.edit_win_title if not self.edit_win_title == None else 'Edit values',
-#                                 drop_down_list=self.drop_down_list)
-#             except:
-#                 messagebox.showerror('Edit error', 'No row is selected')
-#         logger.debug('Double click')
+    def __validate_text(self, input: any):
+        r'''
+        Entry validation
+        Rebuild de treeview using the input as filter
+        '''
+        logger.debug(input)
+        self.tree_view_insert(self.file_list, input)
+        return True
+        
+
+    def tree_view_insert(self, name_date_list: list, filter: str | None=None):
+        self.treeview_list.delete(*self.treeview_list.get_children())
+        if filter:
+            name_date_list = [name_date for name_date in name_date_list if filter in name_date[0]]
+        for name_date in name_date_list:
+            self.treeview_list.insert('', tkinter.END, values=tuple(name_date))
 
 
-#     def return_config_updated(self) -> list:
-#         move_settings_list = [self.file_manag_tree.item(value)['values'] for value in self.file_manag_tree.get_children()]
-#         return move_settings_list
+    def create_treeview_list(self):
+        try:
+            file_list = file_handler.file_list(self.path_detail.path, self.path_detail.extension)
+            if len(file_list) > 0:
+                name_date_list = [[file, datetime.strftime(datetime.fromtimestamp(getmtime(join(self.path_detail.path, file))), '%d/%m/%Y %H:%M:%S')] for file in file_list]
+                return name_date_list
+        except Exception as error:
+            logger.debug(error)
+            messagebox.showerror('File List Error', f'Could not load file list due {error}')            
 
 
-#     def __click_button_add(self):
-#         empty_values = []
-#         for _ in range(len(self.file_manag_descri)):
-#             empty_values.append('')
-#         self.file_manag_tree.insert('', tkinter.END, values=(tuple(empty_values)))
-#         children_list = self.file_manag_tree.get_children()
-#         self.file_manag_tree.selection_set(children_list[-1])
-#         self.__tree_item_edit(None)
+    def __on_window_close(self):
+        logger.debug('On close click')
+        self.destroy()
 
 
-#     def __click_button_edit(self):
-#         self.__tree_item_edit(self)
+    # destroy override
+    def destroy(self) -> None:
+        if self.last_grab:
+            self.last_grab.grab_set()
+        self.master_win.attributes('-topmost', self.config_values.always_on_top)
+        support_funcions.save_config_on_change(support_funcions.update_win_size_pos(self.geometry(), 'list_view', self.config_values))
+        return super().destroy()
 
 
-#     def __click_button_delete(self) -> bool:
-#         try:
-#             selected_item = self.file_manag_tree.selection()[0]
-#             logger.debug(selected_item)
-#             if messagebox.askquestion('Delete', f'Do you really want to delete the item {selected_item}'):
-#                 self.file_manag_tree.delete(selected_item)
-#                 return True
-#             return False
-#         except:
-#             messagebox.showerror('Edit error', 'No row is selected')
+'''
+=============================================================================================================================
+
+        Configuration Window        Configuration Window        Configuration Window        Configuration Window        
+
+=============================================================================================================================
+'''
 
 
 class Config_Window(tkinter.Toplevel):
@@ -358,26 +169,23 @@ class Config_Window(tkinter.Toplevel):
     ignore: str
 
     ''' 
-    def __init__(self, config: ConfigurationValues, 
+    def __init__(self, master_win: tkinter.Tk, config: ConfigurationValues, 
                 min_size: tuple,
                 config_path: str,
-                icon_path: str,
                 *args, **kwargs) -> None:
         tkinter.Toplevel.__init__(self, *args, **kwargs)
         self.last_grab = self.grab_current()
         self.grab_set()
-        self.config = config
+        self.config_values = config
         self.config_path = config_path
         self.title('Configuration')
-        self.icon_path = icon_path
         self.minsize(width=min_size[0], height=min_size[1])
-
-        # Icon load hard coded, but it doesn't matter
-        try:
-            self.icon_path = file_handler.resource_path('./Icon/tiger.ico')
-            self.icon_image = Image.open(self.icon_path)
-        except Exception as error:
-            logger.error(f'Could not load icon {error}')
+        self.master_win = master_win
+        if self.config_values.always_on_top == True:
+            self.master_win.attributes('-topmost', False)
+        win_pos = support_funcions.check_win_pos(self.config_values, 'settings')
+        if win_pos:
+            self.geometry(win_pos)
         self.rowconfigure(1, weight=1)
         self.columnconfigure(0, weight=1)
 
@@ -390,7 +198,7 @@ class Config_Window(tkinter.Toplevel):
         tkinter.Label(config_main, text='Update time', justify='left').grid(column=2, row=0, sticky='nesw', padx=(5), pady=(5))
         self.time_entry = tkinter.Entry(config_main, justify='center')
         self.time_entry.grid(column=3, row=0, sticky='nesw', columnspan=2, padx=(5), pady=(5))
-        self.time_entry.insert(tkinter.END, self.config.update_time)
+        self.time_entry.insert(tkinter.END, self.config_values.update_time)
 
         # Treeview Frame
         config_treeview = tkinter.Frame(self)
@@ -405,10 +213,12 @@ class Config_Window(tkinter.Toplevel):
         for i, (key, value) in enumerate(headings_dict.items()):
             self.path_treeview.heading(key, text=value)
             self.path_treeview.column(i, minwidth=20, width=column_size[i])
-        for path_value in self.config.path_list:
+        for path_value in self.config_values.path_list:
             self.path_treeview.insert('', tkinter.END, values=(path_value.name, path_value.path, path_value.extension, path_value.ignore))
         self.path_treeview.grid(column=0, row=0, columnspan=4, sticky='nesw')
-        ttk.Scrollbar(config_treeview, orient=tkinter.VERTICAL, command=self.path_treeview.yview).grid(column=4, row=0, sticky='ns', padx=(0, 5))
+        scroll_bar = ttk.Scrollbar(config_treeview, orient=tkinter.VERTICAL, command=self.path_treeview.yview)
+        scroll_bar.grid(column=4, row=0, sticky='ns', padx=(0, 5))
+        self.path_treeview.configure(yscrollcommand=scroll_bar.set)
 
         self.path_treeview.bind('<Double-1>', self.__treeview_edit)
         self.path_treeview.bind('<Return>', self.__treeview_edit)
@@ -453,7 +263,7 @@ class Config_Window(tkinter.Toplevel):
             self.path_treeview.selection()[0]
             label_list = ('Display name', 'Path', 'Extension', 'Ignore')
             type_list = ('str', 'path', 'str', 'str')
-            self.path_treeview_edit = Edit_Values(self.path_treeview, label_list, type_list, 'Edit directory values', icon_path=self.icon_path)
+            self.path_treeview_edit = Edit_Values(self.path_treeview, self.config_values, label_list, type_list, 'Edit directory values')
         except Exception as error:
             logger.debug(error)
             messagebox.showerror('Edit error', 'No row is selected')
@@ -467,7 +277,7 @@ class Config_Window(tkinter.Toplevel):
         try:
             selected_item = self.path_treeview.selection()[0]
             logger.debug(selected_item)
-            if messagebox.askquestion('Delete', f'Do you really want to delete the item {selected_item}?'):
+            if messagebox.askquestion('Delete', f'Do you really want to delete the item {selected_item}?') == 'yes':
                 self.path_treeview.delete(selected_item)
         except:
             messagebox.showerror('Delete error', 'No row is selected')
@@ -507,12 +317,12 @@ class Config_Window(tkinter.Toplevel):
         '''
         logger.debug('Save clicked')
 
-        new_config = deepcopy(self.config)
+        new_config = deepcopy(self.config_values)
         new_config.update_time = int(self.time_entry.get())
         new_config.path_list = [PathDetails(*self.path_treeview.item(value)['values']) for value in self.path_treeview.get_children()]
-        if not self.config.__eq__(new_config):
+        if not self.config_values.__eq__(new_config):
             logger.debug('Configuration objects are different')
-            self.config = deepcopy(new_config)
+            self.config_values = deepcopy(new_config)
             json_config.save_json_config(self.config_path, new_config.to_dict())
             logger.info('<UPDATE> Configuration values updated')
         self.destroy()
@@ -527,6 +337,9 @@ class Config_Window(tkinter.Toplevel):
     def destroy(self) -> None:
         if self.last_grab:
             self.last_grab.grab_set()
+        self.master_win.attributes('-topmost', self.config_values.always_on_top)            
+        config_updated = support_funcions.update_win_size_pos(self.geometry(), 'settings', self.config_values)
+        support_funcions.save_config_on_change(config_updated)
         return super().destroy()
 
 '''
@@ -540,21 +353,24 @@ class Config_Window(tkinter.Toplevel):
 class Edit_Values(tkinter.Toplevel):
     def __init__(self, 
                     parent=ttk.Treeview, 
+                    config= ConfigurationValues,
                     key_list=tuple, 
                     type_list=tuple,
                     edit_title=str,
-                    icon_path=str,
                     values_disabled=None, 
                     focus_force=None, 
                     drop_down_list=None,
                     *args, **kwargs) -> None:
         tkinter.Toplevel.__init__(self, *args, **kwargs)
+        self.config_values = config
         self.last_grab = self.grab_current()
         self.grab_set()
         self.parent = parent
         self.title(edit_title)
         self.transient()
-        self.icon_path = icon_path
+        win_pos = support_funcions.check_win_pos(self.config_values, 'edit')
+        if win_pos:
+            self.geometry(win_pos)
         self.selected_item = self.parent.selection()[0]
         self.record_value = [str(value) for value in self.parent.item(self.selected_item)['values']]
         self.type_list = type_list
@@ -685,12 +501,13 @@ class Edit_Values(tkinter.Toplevel):
     def destroy(self) -> None:
         if self.last_grab:
             self.last_grab.grab_set()
+        support_funcions.save_config_on_change(support_funcions.update_win_size_pos(self.geometry(), 'edit', self.config_values))
         return super().destroy()
 
 
 # Basic About class
 class About(tkinter.Toplevel):
-    def __init__(self, title=str, label_values=str, image_file=str, icon_path=str, *args, **kwargs) -> None:
+    def __init__(self, master_win: tkinter.Tk, master_always_on_top: bool, title=str, label_values=str, image_file=str, *args, **kwargs) -> None:
         r'''
         About Window
         ------------
@@ -701,10 +518,10 @@ class About(tkinter.Toplevel):
         self.last_grab = self.grab_current()
         self.grab_set()
         self.geometry('450x400')
-        try:
-            self.iconbitmap(icon_path)
-        except Exception as error:
-            logger.error(f'About error {error}')
+        self.master_win = master_win
+        self.always_on_top = master_always_on_top
+        if self.always_on_top == True:
+            self.master_win.attributes('-topmost', False)
         self.title(title)
         self.resizable(width=False, height=False)
         image = Image.open(image_file)
@@ -729,6 +546,7 @@ class About(tkinter.Toplevel):
     def destroy(self) -> None:
         if self.last_grab:
             self.last_grab.grab_set()
+        self.master_win.attributes('-topmost', self.always_on_top)
         return super().destroy()
 
 

@@ -1,9 +1,31 @@
 {
     "update_time": 10,
-    "width": "326",
-    "height": "389",
-    "x": "1416",
-    "y": "355",
+    "list_geometry": {
+        "main": [
+            "326",
+            "349",
+            "-419",
+            "478"
+        ],
+        "settings": [
+            "458",
+            "389",
+            "-648",
+            "267"
+        ],
+        "edit": [
+            "432",
+            "145",
+            "542",
+            "512"
+        ],
+        "list_view": [
+            "534",
+            "565",
+            "315",
+            "197"
+        ]
+    },
     "always_on_top": "1",
     "path_list": [
         {
@@ -13,14 +35,8 @@
             "ignore": ""
         },
         {
-            "name": "MIddleware",
+            "name": "Middleware",
             "path": "\\\\192.168.5.103\\lms\\HOST_EXPORT\\Jobs",
-            "extension": "pdf",
-            "ignore": ""
-        },
-        {
-            "name": "Volpe Print",
-            "path": "\\\\192.168.5.103\\lms\\HOST_EXPORT\\Jobs_Volpe",
             "extension": "pdf",
             "ignore": ""
         }

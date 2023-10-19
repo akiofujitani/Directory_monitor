@@ -1,14 +1,12 @@
-import logging, log_builder, file_handler, tkinter, json_config
-from classes import ConfigurationValues, PathDetails
-from gui_builder import Config_Window, About
+import logging, log_builder, file_handler, tkinter, json_config, support_funcions
+from classes import ConfigurationValues
+from gui_builder import Config_Window, About, ListView
 from queue import Queue
 from threading import Event, Thread
 from tkinter import messagebox
 from tkinter import ttk
-from PIL import Image
-from re import search
+from PIL import Image, ImageTk
 from time import sleep
-from copy import deepcopy
 
 logger = logging.getLogger('directory_monitor')
 
@@ -16,10 +14,32 @@ logger = logging.getLogger('directory_monitor')
 configuration_template = '''
 {
     "update_time" : "10",
-    "width" : "",
-    "height" : "",
-    "x" : "0",
-    "y" : "0",
+    "list_geometry" : {
+        "main" : [
+            "", 
+            "", 
+            0, 
+            0
+        ],
+        "settings" : [
+            "", 
+            "", 
+            0, 
+            0
+        ],
+        "edit" : [
+            "", 
+            "", 
+            0, 
+            0
+        ],
+        "list_view" : [
+            "", 
+            "", 
+            0, 
+            0
+        ]
+    },
     "always_on_top" : "False",
     "path_list" : [
         {
@@ -32,7 +52,6 @@ configuration_template = '''
 }
 '''
 
-
 class MainApp(tkinter.Tk):
     def __init__(self, title: str, log_queue: Queue, main_thread : Thread, config: ConfigurationValues, *args, **kwargs) -> None:
         tkinter.Tk.__init__(self, *args, **kwargs)
@@ -42,15 +61,17 @@ class MainApp(tkinter.Tk):
         self.main_thread = main_thread
 
         # If config has window size and position, set it in app
-        if config.width and config.height:
-            geometry_values = f'{config.width}x{config.height}+{config.x}+{config.y}'
-            logger.debug(geometry_values)
-            self.geometry(geometry_values)
+        win_pos = support_funcions.check_win_pos(self.config_values, 'main')
+        if win_pos:
+            self.geometry(win_pos)
 
         # Icon load hard coded, but it doesn't matter
         try:
-            self.icon_path = file_handler.resource_path('./Icon/tiger.ico')
-            self.icon_image = Image.open(self.icon_path)
+            self.icon_path = file_handler.resource_path('./Icon/walrus.png')
+            icon = Image.open(self.icon_path)
+            icon.resize((96, 96), Image.Resampling.LANCZOS)
+            photo = ImageTk.PhotoImage(icon)
+            self.wm_iconphoto(True, photo)
         except Exception as error:
             logger.error(f'Could not load icon {error}')
         
@@ -81,9 +102,9 @@ class MainApp(tkinter.Tk):
         self.path_tree_view.column('# 2', anchor=tkinter.CENTER)
 
         # treeview style
-        style = ttk.Style()
-        style.configure('Treeview.Heading', rowheight=30, font=(None, 10, 'bold'))
-        style.configure('Treeview', rowheight=30, font=(None, 12))
+        self.style = ttk.Style()
+        self.style.configure('Treeview.Heading', rowheight=30, font=(None, 10, 'bold'))
+        self.style.configure('Treeview', rowheight=30, font=(None, 12))
 
         for i in range(len(column_list)):
             self.path_tree_view.heading(column_list[i], text=self.column_descr[i])
@@ -97,8 +118,8 @@ class MainApp(tkinter.Tk):
 
         # Treeview Scrollbar configuration
         y_scrollbar = ttk.Scrollbar(self, orient=tkinter.VERTICAL, command=self.path_tree_view.yview)
-        self.path_tree_view.configure(yscroll=y_scrollbar.set)
         y_scrollbar.grid(row=0, column=4, sticky='ns', padx=(0, 5), pady=(5, 0))
+        self.path_tree_view.configure(yscroll=y_scrollbar.set)
 
         # Treeview configure
         self.path_tree_view.columnconfigure(0, weight=1)
@@ -171,8 +192,7 @@ class MainApp(tkinter.Tk):
 
 
     def __update_gui(self):
-        for child in self.path_tree_view.get_children():
-            self.path_tree_view.delete(child)
+        self.path_tree_view.delete(*self.path_tree_view.get_children())
         for i in range(len(self.config_values.path_list)):
             path_values = self.config_values.path_list[i]
             self.path_tree_view.insert('', tkinter.END, values=(path_values.name, path_values.path))
@@ -186,7 +206,7 @@ class MainApp(tkinter.Tk):
         logger.info(f'Always on top {self.entry.get()}')
         self.attributes('-topmost', self.entry.get())
         self.config_values.always_on_top = self.entry.get()
-        self.__save_config_on_change()
+        support_funcions.save_config_on_change(self.config_values)
 
 
     def __update(self):
@@ -194,12 +214,12 @@ class MainApp(tkinter.Tk):
         Update values from treeview
         '''
         logger.info('Update clicked')
-        self.update_count(self.config_values)
+        support_funcions.update_count(self.config_values)
 
 
     def __configuration(self):
         logger.debug('Config button clicked')
-        self.config_window = Config_Window(self.config_values, (400, 300), 'directory_monitor_config.json', self.icon_path)
+        self.config_window = Config_Window(self, self.config_values, (400, 300), 'directory_monitor_config.json')
 
 
     def __on_window_close(self):
@@ -209,16 +229,17 @@ class MainApp(tkinter.Tk):
     def __quit_window(self):
         if messagebox.askokcancel('Quit', 'Do you want to quit?'):
             event.set()
-            self.__update_win_size_pos(self.config_values)
-            self.__save_config_on_change()
+            support_funcions.save_config_on_change(support_funcions.update_win_size_pos(self.geometry(), 'main', self.config_values))
             logger.info('Forcing kill thread if it is open')
             self.after(150, self.deiconify)
             self.destroy()
 
 
-    def __tree_item_view(self):
+    def __tree_item_view(self, event=None):
         try:
-            self.path_tree_view.selection()[0]
+            item_id = self.path_tree_view.selection()[0]
+            selected_item = self.path_tree_view.item(item_id)['values']
+            self.list_view = ListView(self, self.config_values.get_path_details(selected_item[0]), self.config_values, (500, 500))
         except:
             messagebox.showerror('Selection error', 'No row is selected')
         logger.debug('Treeview double click, return')
@@ -226,91 +247,21 @@ class MainApp(tkinter.Tk):
 
     def __about_command(self):
         logger.info('About clicked')
-        self.about = About('About', '''
-        Application name: Directory Monitor
-        Version: 0.10.00
-        Developed by: Akio Fujitani
-        e-mail: akiofujitani@gmail.com
-        ''', file_handler.resource_path('./Icon/Bedo.jpg'), self.icon_path)
-
-
-    def __update_win_size_pos(self, config: ConfigurationValues):
-        r'''
-        Update window size and position in config object
-        '''
-        geometry_str = self.geometry()
-        temp_splited_geometry = geometry_str.split('+')
-        win_size = temp_splited_geometry[0].split('x')
-        win_pos = [temp_splited_geometry[1], temp_splited_geometry[2]]
-        if not win_size[0] == config.width or not win_size[1] == config.width or not win_pos[0] == config.x or not win_pos[1] == config.y:
-            logger.debug(f'{win_size[0]} x {win_size[1]} + {win_pos[0]} + {win_pos[1]}')
-            config.width = win_size[0]
-            config.height = win_size[1]
-            config.x = win_pos[0]
-            config.y = win_pos[1]
-        return
-
-
-    def __save_config_on_change(self):
-        try:
-            config_value = json_config.load_json_config('directory_monitor_config.json')
-            old_config = ConfigurationValues.check_type_insertion(config_value)
-            if not self.config_values.__eq__(old_config):
-                temp_config = deepcopy(self.config_values)
-                json_config.save_json_config('directory_monitor_config.json', temp_config.to_dict())
-        except Exception as error:
-            logger.error(f'Could not save configuration values {error}')                
-
-
-    @staticmethod
-    def update_count(config : ConfigurationValues) -> None:
-        for path_value in config.path_list:
-            try:
-                file_list = file_handler.file_list(path_value.path, path_value.extension)
-                if path_value.ignore:
-                    for file_name in file_list:
-                        if reg_ex_ignore(path_value.ignore, file_name):
-                            file_list.remove(file_name)
-                logger.info(f'<PATH>path_name:{path_value.name},quantity:{len(file_list)}')
-            except Exception as error:
-                logger.error(f'Update count error {error}')
-        return
+        self.about = About(self, self.config_values.always_on_top,
+            'About', '''
+            Application name: Directory Monitor
+            Version: 0.10.00
+            Developed by: Akio Fujitani
+            e-mail: akiofujitani@gmail.com
+        ''', file_handler.resource_path('./Icon/Bedo.jpg'))              
 
 
 def main(event: Event, config: ConfigurationValues):
     while True:
-        MainApp.update_count(config)
+        support_funcions.update_count(config)
         if event.is_set():
             return
         sleep(config.update_time)
-
-
-# def __update_count(config: ConfigurationValues) -> None:
-#     for path_value in config.path_list:
-#         try:
-#             file_list = file_handler.file_list(path_value.path, path_value.extension)
-#             if path_value.ignore:
-#                 for file_name in file_list:
-#                     if reg_ex_ignore(path_value.ignore, file_name):
-#                         file_list.remove(file_name)
-#             logger.info(f'<PATH>path_name:{path_value.name},quantity:{len(file_list)}')
-#         except Exception as error:
-#             logger.error(f'Update count error {error}')
-#     return
-
-
-def reg_ex_ignore(reg_ex: str, search_value: str) -> bool:
-    r'''
-    Regex search returning boolean
-    ----- ------ --------- -------
-    
-    The ignore must be in the regex format
-    See Python RegEx Documentation
-
-    '''
-    if search(reg_ex, search_value):
-        return True
-    return False
 
 
 if __name__ == '__main__':
@@ -327,10 +278,9 @@ if __name__ == '__main__':
         logger.critical(f'Configuration error {error}')
         exit()
 
-    
     main_thread = Thread(target=main, args=(event, config, ), daemon=True, name='Directory Monitor')
     main_thread.start()
 
-    main_app = MainApp('Directoru Monitor', log_queue, main_thread, config)
+    main_app = MainApp('Directory Monitor', log_queue, main_thread, config)
     main_app.mainloop()
 
