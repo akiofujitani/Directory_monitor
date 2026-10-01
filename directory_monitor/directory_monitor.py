@@ -200,7 +200,7 @@ class MainApp(tkinter.Tk):
 
 
     def __always_on_top(self):
-        r'''
+        '''
         Set window do always on top
         '''
         logger.info(f'Always on top {self.entry.get()}')
@@ -210,7 +210,7 @@ class MainApp(tkinter.Tk):
 
 
     def __update(self):
-        r'''
+        '''
         Update values from treeview
         '''
         logger.info('Update clicked')

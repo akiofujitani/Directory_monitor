@@ -7,7 +7,7 @@ logger = logging.getLogger('suport_funcions')
 
 
 def update_win_size_pos(geometry_str:str, window_name: str, config: ConfigurationValues):
-    r'''
+    '''
     Update window size and position in config object
     '''
     temp_splited_geometry = geometry_str.split('+')
@@ -22,7 +22,7 @@ def update_win_size_pos(geometry_str:str, window_name: str, config: Configuratio
 
 
 def save_config_on_change(config: ConfigurationValues):
-    r'''
+    '''
     Save to configuration file if it has changes
     '''
     try:
@@ -36,7 +36,7 @@ def save_config_on_change(config: ConfigurationValues):
 
 
 def check_win_pos(config: ConfigurationValues, win_name: str):
-    r'''
+    '''
     Get win position in configuration object
     '''
     win_pos = config.list_geometry[win_name]
@@ -47,7 +47,7 @@ def check_win_pos(config: ConfigurationValues, win_name: str):
 
 
 def update_count(config : ConfigurationValues) -> None:
-    r'''
+    '''
     Update files count in each directory in config object
     '''
     for path_value in config.path_list:
@@ -64,7 +64,7 @@ def update_count(config : ConfigurationValues) -> None:
 
 
 def reg_ex_ignore(reg_ex: str, search_value: str) -> bool:
-    r'''
+    '''
     Regex search returning boolean
     ----- ------ --------- -------
     
